@@ -4,15 +4,20 @@ import subprocess
 import ctypes
 from pathlib import Path
 from typing import List
-
 from PyQt5.QtWidgets import (
     QApplication, QSystemTrayIcon, QMenu, QWidget, QVBoxLayout, QHBoxLayout,
     QListWidget, QPushButton, QTabWidget, QListWidgetItem, QMessageBox
 )
 from PyQt5.QtCore import Qt, QObject, pyqtSignal, pyqtSlot, QMetaObject, Q_ARG
 from PyQt5.QtGui import QIcon
-
 from pynput import keyboard
+
+startupinfo = subprocess.STARTUPINFO()
+startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+startupinfo.wShowWindow = subprocess.SW_HIDE
+stdin=subprocess.DEVNULL,
+stdout=subprocess.DEVNULL,
+stderr=subprocess.DEVNULL
 
 # Запрос прав администратора
 if not ctypes.windll.shell32.IsUserAnAdmin():
@@ -245,24 +250,31 @@ def main():
         if not pids:
             return
 
+        # Параметры для запуска процесса
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+
         for pid in pids:
             try:
                 if action == 'switch':
-                    subprocess.run(
-                        ['SoundVolumeView.exe', '/Switch', str(pid)],
-                        creationflags=subprocess.CREATE_NO_WINDOW
-                    )
+                    cmd = ['SoundVolumeView.exe', '/Switch', str(pid)]
                 else:
-                    step = 10
-                    volume_change = step if action == 'increase' else -step
-                    subprocess.run(
-                        ['SoundVolumeView.exe', '/ChangeVolume', 
-                         str(pid), str(volume_change)],
-                        creationflags=subprocess.CREATE_NO_WINDOW
-                    )
+                    step = 5
+                    volume = step if action == 'increase' else -step
+                    cmd = ['SoundVolumeView.exe', '/ChangeVolume', str(pid), str(volume)]
+
+                # Асинхронный запуск без ожидания завершения
+                subprocess.Popen(
+                    cmd,
+                    startupinfo=startupinfo,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    shell=False
+                )
             except Exception as e:
                 print(f"Ошибка обработки PID {pid}: {str(e)}")
-
     handler.action_signal.connect(handle_action)
     hotkey_manager = HotkeyManager(lambda a, g: handler.action_signal.emit(a, g))
     hotkey_manager.start()
