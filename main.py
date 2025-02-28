@@ -1,7 +1,13 @@
 import sys
+import time
+import comtypes
 from PyQt6.QtWidgets import *
 from PyQt6.QtGui import *
 from PyQt6.QtCore import *
+from pycaw.pycaw import AudioUtilities, IAudioSessionControl2
+
+# Инициализация COM для PyCaw
+comtypes.CoInitialize()
 
 DARK_STYLE = """
     QWidget {
@@ -72,11 +78,9 @@ class HotkeyLineEdit(QLineEdit):
         key = event.key()
         modifiers = event.modifiers()
 
-        # Игнорируем одиночные нажатия модификаторов
         if key in [Qt.Key.Key_Control, Qt.Key.Key_Shift, Qt.Key.Key_Alt, Qt.Key.Key_Meta]:
             return
 
-        # Обрабатываем модификаторы
         modifier_names = []
         if modifiers & Qt.KeyboardModifier.ControlModifier:
             modifier_names.append("Ctrl")
@@ -87,48 +91,123 @@ class HotkeyLineEdit(QLineEdit):
         if modifiers & Qt.KeyboardModifier.MetaModifier:
             modifier_names.append("Win")
 
-        # Обрабатываем основную клавишу
         key_name = QKeySequence(key).toString(QKeySequence.SequenceFormat.NativeText)
         
-        # Для цифр Numpad добавляем префикс
         if event.nativeVirtualKey() >= 0x60 and event.nativeVirtualKey() <= 0x6F:
             key_name = f"Num{key_name}"
 
-        # Формируем полную комбинацию
         full_sequence = "+".join(modifier_names + [key_name])
-
-        # Обновляем текст в поле
         self.setText(full_sequence)
-        
-        # Сохраняем комбинацию для последующего использования
         self.modifiers = modifiers
         self.keys = [key]
+
+class AudioSessionWidget(QListWidgetItem):
+    def __init__(self, session, parent=None):
+        super().__init__(parent)
+        self.session = session
+        self.process_name = self.get_process_name()
+        self.setText(f"{self.process_name} - {self.get_volume()}%")
+
+    def get_process_name(self):
+        try:
+            return self.session.Process and self.session.Process.name() or "System"
+        except:
+            return "Unknown"
+
+    def get_volume(self):
+        return int(self.session.SimpleAudioVolume.GetMasterVolume() * 100)
+
+class AppsTab(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.sessions = []
+        self.init_ui()
+        self.init_audio()
+        self.start_updater()
+
+    def init_ui(self):
+        layout = QHBoxLayout()
+        
+        # Left panel
+        self.left_panel = QListWidget()
+        self.left_panel.setDragEnabled(True)
+        self.left_panel.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        
+        # Buttons
+        btn_panel = QHBoxLayout()
+        self.delete_btn = QPushButton("Delete")
+        self.delete_btn.clicked.connect(self.delete_item)
+        btn_panel.addWidget(self.delete_btn)
+        
+        left_layout = QVBoxLayout()
+        left_layout.addWidget(self.left_panel)
+        left_layout.addLayout(btn_panel)
+        
+        # Right tabs
+        self.right_tabs = QTabWidget()
+        for i in range(1, 4):
+            tab = QWidget()
+            tab.list = QListWidget()
+            tab.list.setAcceptDrops(True)
+            tab.list.setDragDropMode(QAbstractItemView.DragDropMode.DropOnly)
+            tab.layout = QVBoxLayout()
+            tab.layout.addWidget(tab.list)
+            tab.setLayout(tab.layout)
+            self.right_tabs.addTab(tab, f"Category {i}")
+        
+        layout.addLayout(left_layout, 40)
+        layout.addWidget(self.right_tabs, 60)
+        self.setLayout(layout)
+
+    def init_audio(self):
+        self.update_sessions()
+
+    def start_updater(self):
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_sessions)
+        self.timer.start(1000)
+
+    def update_sessions(self):
+        sessions = AudioUtilities.GetAllSessions()
+        new_sessions = [s for s in sessions if s.Process]
+        
+        if len(new_sessions) != len(self.sessions):
+            self.left_panel.clear()
+            for session in new_sessions:
+                item = AudioSessionWidget(session)
+                self.left_panel.addItem(item)
+            self.sessions = new_sessions
+
+    def delete_item(self):
+        current_tab = self.right_tabs.currentWidget()
+        if current_tab:
+            current_item = current_tab.list.currentItem()
+            if current_item:
+                row = current_tab.list.row(current_item)
+                current_tab.list.takeItem(row)
 
 class SettingsWindow(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Настройки")
+        self.setWindowTitle("Settings")
         self.setMinimumSize(600, 400)
         self.init_ui()
 
     def init_ui(self):
-        # Создаем вкладки
         tab_widget = QTabWidget()
         
-        # Вкладка Hotkeys
+        # Hotkeys Tab
         hotkeys_tab = QWidget()
         hotkeys_layout = QFormLayout()
         
-        # Группы 1-3
         self.group_edits = []
         for i in range(1, 4):
             edit = HotkeyLineEdit()
-            hotkeys_layout.addRow(QLabel(f"Группа {i} -"), edit)
+            hotkeys_layout.addRow(QLabel(f"Group {i} -"), edit)
             self.group_edits.append(edit)
         
         hotkeys_layout.addItem(QSpacerItem(20, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
         
-        # Контролы громкости
         self.volume_controls = {}
         for control in ["Vol+", "Vol-", "Mute"]:
             edit = HotkeyLineEdit()
@@ -136,45 +215,16 @@ class SettingsWindow(QWidget):
             self.volume_controls[control] = edit
         
         hotkeys_tab.setLayout(hotkeys_layout)
-
-        # Вкладка Apps
-        apps_tab = QWidget()
-        apps_layout = QHBoxLayout()
         
-        # Левый список
-        left_panel = QVBoxLayout()
-        self.apps_list = QListWidget()
-        self.apps_list.addItems(["Приложение 1", "Приложение 2", "Приложение 3"])
-        left_panel.addWidget(self.apps_list)
+        # Apps Tab
+        apps_tab = AppsTab()
         
-        # Кнопки
-        btn_panel = QHBoxLayout()
-        btn_panel.addWidget(QPushButton("Delete"))
-        btn_panel.addWidget(QPushButton("Save"))
-        left_panel.addLayout(btn_panel)
-        
-        # Правые вкладки
-        right_tabs = QTabWidget()
-        for i in range(1, 4):
-            tab = QWidget()
-            tab.layout = QVBoxLayout()
-            tab.list = QListWidget()
-            tab.list.addItems([f"Элемент {j}" for j in range(1, 6)])
-            tab.layout.addWidget(tab.list)
-            tab.setLayout(tab.layout)
-            right_tabs.addTab(tab, f"Категория {i}")
-        
-        apps_layout.addLayout(left_panel, 40)
-        apps_layout.addWidget(right_tabs, 60)
-        apps_tab.setLayout(apps_layout)
-
-        # Вкладка Etc
+        # Etc Tab
         etc_tab = QWidget()
         etc_layout = QVBoxLayout()
-        etc_layout.addWidget(QLabel("Дополнительные настройки"))
+        etc_layout.addWidget(QLabel("Additional Settings"))
         etc_tab.setLayout(etc_layout)
 
-        # Добавляем вкладки
         tab_widget.addTab(hotkeys_tab, "Hotkeys")
         tab_widget.addTab(apps_tab, "Apps")
         tab_widget.addTab(etc_tab, "Etc")
@@ -189,8 +239,8 @@ class TrayApp(QSystemTrayIcon):
         self.setIcon(QIcon("icon.ico"))
         
         self.menu = QMenu()
-        self.settings_action = self.menu.addAction("Настройки")
-        self.exit_action = self.menu.addAction("Выход")
+        self.settings_action = self.menu.addAction("Settings")
+        self.exit_action = self.menu.addAction("Exit")
         
         self.settings_action.triggered.connect(self.show_settings)
         self.exit_action.triggered.connect(QApplication.instance().quit)
@@ -205,11 +255,8 @@ class TrayApp(QSystemTrayIcon):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    
-    # Применяем кастомные стили
     app.setStyleSheet(DARK_STYLE)
     
-    # Скрываем главное окно
     main_window = QMainWindow()
     main_window.hide()
     
