@@ -60,6 +60,49 @@ DARK_STYLE = """
     }
 """
 
+class HotkeyLineEdit(QLineEdit):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setReadOnly(True)
+        self.keys = []
+        self.modifiers = Qt.KeyboardModifier.NoModifier
+
+    def keyPressEvent(self, event):
+        key = event.key()
+        modifiers = event.modifiers()
+
+        # Игнорируем одиночные нажатия модификаторов
+        if key in [Qt.Key.Key_Control, Qt.Key.Key_Shift, Qt.Key.Key_Alt, Qt.Key.Key_Meta]:
+            return
+
+        # Обрабатываем модификаторы
+        modifier_names = []
+        if modifiers & Qt.KeyboardModifier.ControlModifier:
+            modifier_names.append("Ctrl")
+        if modifiers & Qt.KeyboardModifier.ShiftModifier:
+            modifier_names.append("Shift")
+        if modifiers & Qt.KeyboardModifier.AltModifier:
+            modifier_names.append("Alt")
+        if modifiers & Qt.KeyboardModifier.MetaModifier:
+            modifier_names.append("Win")
+
+        # Обрабатываем основную клавишу
+        key_name = QKeySequence(key).toString(QKeySequence.SequenceFormat.NativeText)
+        
+        # Для цифр Numpad добавляем префикс
+        if event.nativeVirtualKey() >= 0x60 and event.nativeVirtualKey() <= 0x6F:
+            key_name = f"Num{key_name}"
+
+        # Формируем полную комбинацию
+        full_sequence = "+".join(modifier_names + [key_name])
+
+        # Обновляем текст в поле
+        self.setText(full_sequence)
+        
+        # Сохраняем комбинацию для последующего использования
+        self.modifiers = modifiers
+        self.keys = [key]
+
 class SettingsWindow(QWidget):
     def __init__(self):
         super().__init__()
@@ -70,18 +113,30 @@ class SettingsWindow(QWidget):
     def init_ui(self):
         # Создаем вкладки
         tab_widget = QTabWidget()
+        hotkeys_tab = QWidget()
+        hotkeys_layout = QFormLayout()
         
         # Вкладка Hotkeys
         hotkeys_tab = QWidget()
         hotkeys_layout = QFormLayout()
         
         # Группы
+    # Заменяем обычные QLineEdit на HotkeyLineEdit
+        self.group_edits = []
         for i in range(1, 4):
-            hotkeys_layout.addRow(
-                QLabel(f"Группа {i} -"), 
-                QLineEdit()
-            )
+            edit = HotkeyLineEdit()
+            hotkeys_layout.addRow(QLabel(f"Группа {i} -"), edit)
+            self.group_edits.append(edit)
         
+        hotkeys_layout.addItem(QSpacerItem(20, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
+        
+        self.volume_controls = {}
+        for control in ["Vol+", "Vol-", "Mute"]:
+            edit = HotkeyLineEdit()
+            hotkeys_layout.addRow(QLabel(f"{control} -"), edit)
+            self.volume_controls[control] = edit
+        
+        hotkeys_tab.setLayout(hotkeys_layout)
         # Разделитель
         hotkeys_layout.addItem(QSpacerItem(20, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
         
