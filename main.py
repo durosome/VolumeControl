@@ -1,42 +1,176 @@
 import sys
-from PyQt6.QtWidgets import QApplication
-from app.core.hotkeys import HotkeyManager
-from app.core.audio import AudioController
-from app.ui.tray_icon import TrayIcon
-from app.ui.settings import SettingsWindow
-from app.utils.config_manager import SettingsManager
-from app.utils.logger import logger
+from PyQt6.QtWidgets import *
+from PyQt6.QtGui import *
+from PyQt6.QtCore import *
+DARK_STYLE = """
+    QWidget {
+        background-color: #2D2D2D;
+        color: #CCCCCC;
+        font-family: Segoe UI;
+        font-size: 12px;
+    }
+    
+    QTabWidget::pane {
+        border: 1px solid #404040;
+        margin: -1px 0 0 -1px;
+    }
+    
+    QTabBar::tab {
+        background: #353535;
+        border: 1px solid #404040;
+        padding: 8px 15px;
+    }
+    
+    QTabBar::tab:selected {
+        background: #2D2D2D;
+        border-bottom-color: #2D2D2D;
+    }
+    
+    QLineEdit {
+        background: #353535;
+        border: 1px solid #404040;
+        padding: 5px;
+        border-radius: 3px;
+    }
+    
+    QListWidget {
+        background: #353535;
+        border: 1px solid #404040;
+        border-radius: 3px;
+    }
+    
+    QPushButton {
+        background: #404040;
+        border: 1px solid #4D4D4D;
+        padding: 5px 15px;
+        border-radius: 3px;
+    }
+    
+    QPushButton:hover {
+        background: #4D4D4D;
+    }
+    
+    QMenu {
+        background: #353535;
+        border: 1px solid #404040;
+    }
+    
+    QMenu::item:selected {
+        background: #404040;
+    }
+"""
 
-class App:
+class SettingsWindow(QWidget):
     def __init__(self):
-        self.settings = SettingsManager()
-        self.audio = AudioController()
-        self.hotkeys = HotkeyManager()
-        self.tray_icon = TrayIcon(self.show_settings)
+        super().__init__()
+        self.setWindowTitle("Настройки")
+        self.setMinimumSize(600, 400)
+        self.init_ui()
+
+    def init_ui(self):
+        # Создаем вкладки
+        tab_widget = QTabWidget()
+        
+        # Вкладка Hotkeys
+        hotkeys_tab = QWidget()
+        hotkeys_layout = QFormLayout()
+        
+        # Группы
+        for i in range(1, 4):
+            hotkeys_layout.addRow(
+                QLabel(f"Группа {i} -"), 
+                QLineEdit()
+            )
+        
+        # Разделитель
+        hotkeys_layout.addItem(QSpacerItem(20, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
+        
+        # Контролы громкости
+        for control in ["Vol+", "Vol-", "Mute"]:
+            hotkeys_layout.addRow(
+                QLabel(f"{control} -"), 
+                QLineEdit()
+            )
+        
+        hotkeys_tab.setLayout(hotkeys_layout)
+
+        # Вкладка Apps
+        apps_tab = QWidget()
+        apps_layout = QHBoxLayout()
+        
+        # Левый список
+        left_panel = QVBoxLayout()
+        self.apps_list = QListWidget()
+        self.apps_list.addItems(["Приложение 1", "Приложение 2", "Приложение 3"])
+        left_panel.addWidget(self.apps_list)
+        
+        # Кнопки
+        btn_panel = QHBoxLayout()
+        btn_panel.addWidget(QPushButton("Delete"))
+        btn_panel.addWidget(QPushButton("Save"))
+        left_panel.addLayout(btn_panel)
+        
+        # Правые вкладки
+        right_tabs = QTabWidget()
+        for i in range(1, 4):
+            tab = QWidget()
+            tab.layout = QVBoxLayout()
+            tab.list = QListWidget()
+            tab.list.addItems([f"Элемент {j}" for j in range(1, 6)])
+            tab.layout.addWidget(tab.list)
+            tab.setLayout(tab.layout)
+            right_tabs.addTab(tab, f"Категория {i}")
+        
+        apps_layout.addLayout(left_panel, 40)
+        apps_layout.addWidget(right_tabs, 60)
+        apps_tab.setLayout(apps_layout)
+
+        # Вкладка Etc
+        etc_tab = QWidget()
+        etc_layout = QVBoxLayout()
+        etc_layout.addWidget(QLabel("Дополнительные настройки"))
+        etc_tab.setLayout(etc_layout)
+
+        # Добавляем вкладки
+        tab_widget.addTab(hotkeys_tab, "Hotkeys")
+        tab_widget.addTab(apps_tab, "Apps")
+        tab_widget.addTab(etc_tab, "Etc")
+
+        main_layout = QVBoxLayout()
+        main_layout.addWidget(tab_widget)
+        self.setLayout(main_layout)
+
+class TrayApp(QSystemTrayIcon):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setIcon(QIcon("icon.ico"))
+        
+        self.menu = QMenu()
+        self.settings_action = self.menu.addAction("Настройки")
+        self.exit_action = self.menu.addAction("Выход")
+        
+        self.settings_action.triggered.connect(self.show_settings)
+        self.exit_action.triggered.connect(QApplication.instance().quit)  # Исправлено здесь
+        
+        self.setContextMenu(self.menu)
         self.settings_window = None
-
-
-        # Связи
-        self.hotkeys.volume_up_triggered.connect(self.audio.volume_up)
-        self.hotkeys.volume_down_triggered.connect(self.audio.volume_down)
-        self.tray_icon.exit_action.triggered.connect(self.quit)
-
-    def run(self):
-        self.tray_icon.show()
-        logger.info("Приложение запущено")
 
     def show_settings(self):
         if not self.settings_window:
-            self.settings_window = SettingsWindow(self.audio)
+            self.settings_window = SettingsWindow()
         self.settings_window.show()
-        logger.info("Окно настроек отображено")
-
-    def quit(self):
-        self.settings.save()
-        QApplication.quit()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    application = App()
-    application.run()
+    
+    # Применяем кастомные стили
+    app.setStyleSheet(DARK_STYLE)
+    
+    # Скрываем главное окно
+    main_window = QMainWindow()
+    main_window.hide()
+    
+    tray = TrayApp(main_window)
+    tray.show()
+    
     sys.exit(app.exec())
