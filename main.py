@@ -105,7 +105,7 @@ class AudioSessionWidget(QListWidgetItem):
         super().__init__(parent)
         self.session = session
         self.process_name = self.get_process_name()
-        self.setText(self.process_name)  # Убрано отображение процентов
+        self.setText(self.process_name)
 
     def get_process_name(self):
         try:
@@ -114,6 +114,8 @@ class AudioSessionWidget(QListWidgetItem):
             return "Unknown"
 
 class AppsTab(QWidget):
+    tab_renamed = pyqtSignal(int, str)
+
     def __init__(self):
         super().__init__()
         self.sessions = []
@@ -124,12 +126,12 @@ class AppsTab(QWidget):
     def init_ui(self):
         layout = QHBoxLayout()
         
-        # Левый список
+        # Left panel
         self.left_panel = QListWidget()
         self.left_panel.setDragEnabled(True)
         self.left_panel.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         
-        # Кнопки
+        # Buttons
         btn_panel = QHBoxLayout()
         self.delete_btn = QPushButton("Delete")
         self.delete_btn.clicked.connect(self.delete_item)
@@ -139,11 +141,11 @@ class AppsTab(QWidget):
         left_layout.addWidget(self.left_panel)
         left_layout.addLayout(btn_panel)
         
-        # Правые вкладки (теперь внизу)
+        # Right tabs
         self.right_tabs = QTabWidget()
         self.right_tabs.setTabPosition(QTabWidget.TabPosition.South)
         
-        for i in range(1, 4):
+        for i in range(3):
             tab = QWidget()
             tab.list = QListWidget()
             tab.list.setAcceptDrops(True)
@@ -151,11 +153,31 @@ class AppsTab(QWidget):
             tab.layout = QVBoxLayout()
             tab.layout.addWidget(tab.list)
             tab.setLayout(tab.layout)
-            self.right_tabs.addTab(tab, f"Category {i}")
+            self.right_tabs.addTab(tab, f"Category {i+1}")
+        
+        self.right_tabs.tabBar().installEventFilter(self)
         
         layout.addLayout(left_layout, 40)
         layout.addWidget(self.right_tabs, 60)
         self.setLayout(layout)
+
+    def eventFilter(self, source, event):
+        if (event.type() == QEvent.Type.MouseButtonDblClick and 
+            source is self.right_tabs.tabBar()):
+            index = self.right_tabs.tabBar().tabAt(event.pos())
+            if index >= 0:
+                self.rename_tab(index)
+                return True
+        return super().eventFilter(source, event)
+
+    def rename_tab(self, index):
+        old_name = self.right_tabs.tabText(index)
+        new_name, ok = QInputDialog.getText(
+            self, "Rename Category", "New name:", text=old_name
+        )
+        if ok and new_name:
+            self.right_tabs.setTabText(index, new_name)
+            self.tab_renamed.emit(index, new_name)
 
     def init_audio(self):
         self.update_sessions()
@@ -188,26 +210,27 @@ class SettingsWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Settings")
-        self.setMinimumSize(550, 200)  # Новые размеры окна
+        self.setMinimumSize(550, 200)
         self.resize(550, 200)
         self.init_ui()
 
     def init_ui(self):
         tab_widget = QTabWidget()
         
-        # Вкладка Hotkeys (новый макет)
+        # Hotkeys Tab
         hotkeys_tab = QWidget()
         main_hotkeys_layout = QHBoxLayout()
         
-        # Группы слева
-        groups_layout = QFormLayout()
+        # Groups
+        self.groups_layout = QFormLayout()
         self.group_edits = []
-        for i in range(1, 4):
+        for i in range(3):
             edit = HotkeyLineEdit()
-            groups_layout.addRow(QLabel(f"Group {i} -"), edit)
+            label = QLabel(f"Category {i+1} -")
+            self.groups_layout.addRow(label, edit)
             self.group_edits.append(edit)
         
-        # Управление громкостью справа
+        # Volume controls
         volume_layout = QFormLayout()
         self.volume_controls = {}
         for control in ["Vol+", "Vol-", "Mute"]:
@@ -215,26 +238,36 @@ class SettingsWindow(QWidget):
             volume_layout.addRow(QLabel(f"{control} -"), edit)
             self.volume_controls[control] = edit
         
-        main_hotkeys_layout.addLayout(groups_layout, 60)
+        main_hotkeys_layout.addLayout(self.groups_layout, 60)
         main_hotkeys_layout.addLayout(volume_layout, 40)
         hotkeys_tab.setLayout(main_hotkeys_layout)
         
-        # Вкладка Apps
-        apps_tab = AppsTab()
+        # Apps Tab
+        self.apps_tab = AppsTab()
+        self.apps_tab.tab_renamed.connect(self.update_group_names)
         
-        # Вкладка Etc
+        # Initial update
+        QTimer.singleShot(0, self.update_group_names)
+        
+        # Etc Tab
         etc_tab = QWidget()
         etc_layout = QVBoxLayout()
         etc_layout.addWidget(QLabel("Additional Settings"))
         etc_tab.setLayout(etc_layout)
 
         tab_widget.addTab(hotkeys_tab, "Hotkeys")
-        tab_widget.addTab(apps_tab, "Apps")
+        tab_widget.addTab(self.apps_tab, "Apps")
         tab_widget.addTab(etc_tab, "Etc")
 
         main_layout = QVBoxLayout()
         main_layout.addWidget(tab_widget)
         self.setLayout(main_layout)
+
+    def update_group_names(self, index=None, name=None):
+        for i in range(3):
+            label = self.groups_layout.itemAt(i, QFormLayout.ItemRole.LabelRole).widget()
+            tab_name = self.apps_tab.right_tabs.tabText(i)
+            label.setText(f"{tab_name} -")
 
 class TrayApp(QSystemTrayIcon):
     def __init__(self, parent=None):
@@ -257,16 +290,6 @@ class TrayApp(QSystemTrayIcon):
         self.settings_window.show()
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    app.setStyleSheet(DARK_STYLE)
-    
-    main_window = QMainWindow()
-    main_window.hide()
-    
-    tray = TrayApp(main_window)
-    tray.show()
-    
-    sys.exit(app.exec())
     app = QApplication(sys.argv)
     app.setStyleSheet(DARK_STYLE)
     
