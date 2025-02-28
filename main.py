@@ -2,6 +2,7 @@ import sys
 from PyQt6.QtWidgets import *
 from PyQt6.QtGui import *
 from PyQt6.QtCore import *
+
 DARK_STYLE = """
     QWidget {
         background-color: #2D2D2D;
@@ -113,15 +114,12 @@ class SettingsWindow(QWidget):
     def init_ui(self):
         # Создаем вкладки
         tab_widget = QTabWidget()
-        hotkeys_tab = QWidget()
-        hotkeys_layout = QFormLayout()
         
         # Вкладка Hotkeys
         hotkeys_tab = QWidget()
         hotkeys_layout = QFormLayout()
         
-        # Группы
-    # Заменяем обычные QLineEdit на HotkeyLineEdit
+        # Группы 1-3
         self.group_edits = []
         for i in range(1, 4):
             edit = HotkeyLineEdit()
@@ -130,22 +128,12 @@ class SettingsWindow(QWidget):
         
         hotkeys_layout.addItem(QSpacerItem(20, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
         
+        # Контролы громкости
         self.volume_controls = {}
         for control in ["Vol+", "Vol-", "Mute"]:
             edit = HotkeyLineEdit()
             hotkeys_layout.addRow(QLabel(f"{control} -"), edit)
             self.volume_controls[control] = edit
-        
-        hotkeys_tab.setLayout(hotkeys_layout)
-        # Разделитель
-        hotkeys_layout.addItem(QSpacerItem(20, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
-        
-        # Контролы громкости
-        for control in ["Vol+", "Vol-", "Mute"]:
-            hotkeys_layout.addRow(
-                QLabel(f"{control} -"), 
-                QLineEdit()
-            )
         
         hotkeys_tab.setLayout(hotkeys_layout)
 
@@ -205,7 +193,7 @@ class TrayApp(QSystemTrayIcon):
         self.exit_action = self.menu.addAction("Выход")
         
         self.settings_action.triggered.connect(self.show_settings)
-        self.exit_action.triggered.connect(QApplication.instance().quit)  # Исправлено здесь
+        self.exit_action.triggered.connect(QApplication.instance().quit)
         
         self.setContextMenu(self.menu)
         self.settings_window = None
