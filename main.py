@@ -1,10 +1,9 @@
 import sys
-import time
 import comtypes
 from PyQt6.QtWidgets import *
 from PyQt6.QtGui import *
 from PyQt6.QtCore import *
-from pycaw.pycaw import AudioUtilities, IAudioSessionControl2
+from pycaw.pycaw import AudioUtilities
 
 # Инициализация COM для PyCaw
 comtypes.CoInitialize()
@@ -106,16 +105,13 @@ class AudioSessionWidget(QListWidgetItem):
         super().__init__(parent)
         self.session = session
         self.process_name = self.get_process_name()
-        self.setText(f"{self.process_name} - {self.get_volume()}%")
+        self.setText(self.process_name)  # Убрано отображение процентов
 
     def get_process_name(self):
         try:
             return self.session.Process and self.session.Process.name() or "System"
         except:
             return "Unknown"
-
-    def get_volume(self):
-        return int(self.session.SimpleAudioVolume.GetMasterVolume() * 100)
 
 class AppsTab(QWidget):
     def __init__(self):
@@ -128,12 +124,12 @@ class AppsTab(QWidget):
     def init_ui(self):
         layout = QHBoxLayout()
         
-        # Left panel
+        # Левый список
         self.left_panel = QListWidget()
         self.left_panel.setDragEnabled(True)
         self.left_panel.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         
-        # Buttons
+        # Кнопки
         btn_panel = QHBoxLayout()
         self.delete_btn = QPushButton("Delete")
         self.delete_btn.clicked.connect(self.delete_item)
@@ -143,8 +139,10 @@ class AppsTab(QWidget):
         left_layout.addWidget(self.left_panel)
         left_layout.addLayout(btn_panel)
         
-        # Right tabs
+        # Правые вкладки (теперь внизу)
         self.right_tabs = QTabWidget()
+        self.right_tabs.setTabPosition(QTabWidget.TabPosition.South)
+        
         for i in range(1, 4):
             tab = QWidget()
             tab.list = QListWidget()
@@ -190,36 +188,41 @@ class SettingsWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Settings")
-        self.setMinimumSize(600, 400)
+        self.setMinimumSize(550, 200)  # Новые размеры окна
+        self.resize(550, 200)
         self.init_ui()
 
     def init_ui(self):
         tab_widget = QTabWidget()
         
-        # Hotkeys Tab
+        # Вкладка Hotkeys (новый макет)
         hotkeys_tab = QWidget()
-        hotkeys_layout = QFormLayout()
+        main_hotkeys_layout = QHBoxLayout()
         
+        # Группы слева
+        groups_layout = QFormLayout()
         self.group_edits = []
         for i in range(1, 4):
             edit = HotkeyLineEdit()
-            hotkeys_layout.addRow(QLabel(f"Group {i} -"), edit)
+            groups_layout.addRow(QLabel(f"Group {i} -"), edit)
             self.group_edits.append(edit)
         
-        hotkeys_layout.addItem(QSpacerItem(20, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
-        
+        # Управление громкостью справа
+        volume_layout = QFormLayout()
         self.volume_controls = {}
         for control in ["Vol+", "Vol-", "Mute"]:
             edit = HotkeyLineEdit()
-            hotkeys_layout.addRow(QLabel(f"{control} -"), edit)
+            volume_layout.addRow(QLabel(f"{control} -"), edit)
             self.volume_controls[control] = edit
         
-        hotkeys_tab.setLayout(hotkeys_layout)
+        main_hotkeys_layout.addLayout(groups_layout, 60)
+        main_hotkeys_layout.addLayout(volume_layout, 40)
+        hotkeys_tab.setLayout(main_hotkeys_layout)
         
-        # Apps Tab
+        # Вкладка Apps
         apps_tab = AppsTab()
         
-        # Etc Tab
+        # Вкладка Etc
         etc_tab = QWidget()
         etc_layout = QVBoxLayout()
         etc_layout.addWidget(QLabel("Additional Settings"))
@@ -254,6 +257,16 @@ class TrayApp(QSystemTrayIcon):
         self.settings_window.show()
 
 if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    app.setStyleSheet(DARK_STYLE)
+    
+    main_window = QMainWindow()
+    main_window.hide()
+    
+    tray = TrayApp(main_window)
+    tray.show()
+    
+    sys.exit(app.exec())
     app = QApplication(sys.argv)
     app.setStyleSheet(DARK_STYLE)
     
