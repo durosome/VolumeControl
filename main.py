@@ -22,6 +22,7 @@ class HotkeyLineEdit(QLineEdit):
         self.setReadOnly(True)
         self.keys = []
         self.modifiers = Qt.KeyboardModifier.NoModifier
+        self.setMinimumWidth(120)  # Минимальная ширина поля для горячих клавиш
 
     def keyPressEvent(self, event):
         key = event.key()
@@ -87,6 +88,7 @@ class EditableTabBar(QTabBar):
         self.editor = QLineEdit(self)
         self.editor.setWindowFlags(Qt.WindowType.Popup)
         self.editor.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.editor.setMinimumWidth(120)  # Минимальная ширина редактора вкладок
         self.editor.hide()
         self.editor.editingFinished.connect(self.finish_editing)
         self.editor.installEventFilter(self)
@@ -109,7 +111,7 @@ class EditableTabBar(QTabBar):
         rect = self.tabRect(index)
         global_pos = self.mapToGlobal(rect.topLeft())
         self.editor.move(global_pos)
-        self.editor.resize(rect.width(), rect.height())
+        self.editor.resize(max(rect.width(), 120), rect.height())  # Минимальная ширина 120px
         self.editor.setText(self.tabText(index))
         self.editor.selectAll()
         self.editor.show()
@@ -137,8 +139,10 @@ class EditableTabWidget(QTabWidget):
 class EditableLabel(QLabel):
     def __init__(self, text, parent=None):
         super().__init__(text, parent)
+        self.setMinimumWidth(120)  # Минимальная ширина лейбла
         self.editor = QLineEdit(self)
         self.editor.setWindowFlags(Qt.WindowType.Popup)
+        self.editor.setMinimumWidth(120)  # Минимальная ширина редактора
         self.editor.hide()
         self.editor.editingFinished.connect(self.finish_editing)
         self.editor.installEventFilter(self)
@@ -157,7 +161,7 @@ class EditableLabel(QLabel):
     def start_editing(self):
         global_pos = self.mapToGlobal(QPoint(0, 0))
         self.editor.move(global_pos)
-        self.editor.resize(self.size())
+        self.editor.resize(max(self.width(), 120), self.height())  # Минимальная ширина 120px
         self.editor.setText(self.text())
         self.editor.selectAll()
         self.editor.show()
@@ -249,8 +253,8 @@ class SettingsWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Settings")
-        self.setMinimumSize(550, 200)
-        self.resize(550, 200)
+        self.setMinimumSize(600, 250)  # Увеличен минимальный размер окна
+        self.resize(600, 300)
         self.init_ui()
 
     def init_ui(self):
@@ -264,6 +268,7 @@ class SettingsWindow(QWidget):
         for i in range(3):
             edit = HotkeyLineEdit()
             label = EditableLabel(f"Category {i+1} -")
+            label.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Preferred)
             self.groups_layout.addRow(label, edit)
             self.group_edits.append(edit)
         
