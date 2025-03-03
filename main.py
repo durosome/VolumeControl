@@ -6,6 +6,7 @@ from PyQt6.QtGui import *
 from PyQt6.QtCore import *
 from pycaw.pycaw import AudioUtilities
 
+# Инициализация COM для PyCaw
 comtypes.CoInitialize()
 
 def load_stylesheet():
@@ -15,26 +16,7 @@ def load_stylesheet():
     except Exception as e:
         print(f"Error loading stylesheet: {e}")
         return ""
-class TrayApp(QSystemTrayIcon):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setIcon(QIcon("icon.ico"))
-        
-        self.menu = QMenu()
-        self.settings_action = self.menu.addAction("Settings")
-        self.exit_action = self.menu.addAction("Exit")
-        
-        self.settings_action.triggered.connect(self.show_settings)
-        self.exit_action.triggered.connect(QApplication.instance().quit)
-        
-        self.setContextMenu(self.menu)
-        self.settings_window = None
 
-    def show_settings(self):
-        if not self.settings_window:
-            self.settings_window = SettingsWindow()
-        self.settings_window.show()
-    
 class HotkeyLineEdit(QLineEdit):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -110,7 +92,9 @@ class EditableTabBar(QTabBar):
     def start_edit(self, index):
         self.current_edit_index = index
         rect = self.tabRect(index)
-        self.editor.setGeometry(rect)
+        global_pos = self.mapToGlobal(rect.topLeft())
+        self.editor.move(global_pos)
+        self.editor.resize(rect.width(), rect.height())
         self.editor.setText(self.tabText(index))
         self.editor.selectAll()
         self.editor.show()
@@ -156,7 +140,9 @@ class EditableLabel(QLabel):
         super().mouseDoubleClickEvent(event)
 
     def start_editing(self):
-        self.editor.setGeometry(self.rect())
+        global_pos = self.mapToGlobal(QPoint(0, 0))
+        self.editor.move(global_pos)
+        self.editor.resize(self.size())
         self.editor.setText(self.text())
         self.editor.selectAll()
         self.editor.show()
@@ -217,16 +203,14 @@ class AppsTab(QWidget):
 
     def list_key_press_event(self, event):
         if event.key() == Qt.Key.Key_Delete:
-            self.delete_current_item()
+            list_widget = self.sender()
+            if list_widget and isinstance(list_widget, QListWidget):
+                current_item = list_widget.currentItem()
+                if current_item:
+                    row = list_widget.row(current_item)
+                    list_widget.takeItem(row)
         else:
-            QListWidget.keyPressEvent(self.sender(), event)
-
-    def delete_current_item(self):
-        list_widget = self.sender()
-        current_item = list_widget.currentItem()
-        if current_item:
-            row = list_widget.row(current_item)
-            list_widget.takeItem(row)
+            super(QListWidget, self.sender()).keyPressEvent(event)
 
     def show_context_menu(self, pos):
         list_widget = self.sender()
@@ -329,6 +313,26 @@ class SettingsWindow(QWidget):
         if index is not None:
             new_name = label.text().replace(" -", "")
             self.apps_tab.right_tabs.setTabText(index, new_name)
+
+class TrayApp(QSystemTrayIcon):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setIcon(QIcon("icon.ico"))
+        
+        self.menu = QMenu()
+        self.settings_action = self.menu.addAction("Settings")
+        self.exit_action = self.menu.addAction("Exit")
+        
+        self.settings_action.triggered.connect(self.show_settings)
+        self.exit_action.triggered.connect(QApplication.instance().quit)
+        
+        self.setContextMenu(self.menu)
+        self.settings_window = None
+
+    def show_settings(self):
+        if not self.settings_window:
+            self.settings_window = SettingsWindow()
+        self.settings_window.show()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
