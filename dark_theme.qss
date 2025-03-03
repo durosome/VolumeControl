@@ -1,0 +1,56 @@
+/* dark_theme.qss */
+QWidget {
+    background-color: #2D2D2D;
+    color: #CCCCCC;
+    font-family: Segoe UI;
+    font-size: 12px;
+}
+
+QTabWidget::pane {
+    border: 1px solid #404040;
+    margin: -1px 0 0 -1px;
+}
+
+QTabBar::tab {
+    background: #353535;
+    border: 1px solid #404040;
+    padding: 8px 15px;
+}
+
+QTabBar::tab:selected {
+    background: #2D2D2D;
+    border-bottom-color: #2D2D2D;
+}
+
+QLineEdit {
+    background: #353535;
+    border: 1px solid #404040;
+    padding: 5px;
+    border-radius: 3px;
+}
+
+QListWidget {
+    background: #353535;
+    border: 1px solid #404040;
+    border-radius: 3px;
+}
+
+QPushButton {
+    background: #404040;
+    border: 1px solid #4D4D4D;
+    padding: 5px 15px;
+    border-radius: 3px;
+}
+
+QPushButton:hover {
+    background: #4D4D4D;
+}
+
+QMenu {
+    background: #353535;
+    border: 1px solid #404040;
+}
+
+QMenu::item:selected {
+    background: #404040;
+}

@@ -1,71 +1,40 @@
 import sys
 import comtypes
+import os
 from PyQt6.QtWidgets import *
 from PyQt6.QtGui import *
 from PyQt6.QtCore import *
 from pycaw.pycaw import AudioUtilities
 
-# Инициализация COM для PyCaw
 comtypes.CoInitialize()
 
-DARK_STYLE = """
-    QWidget {
-        background-color: #2D2D2D;
-        color: #CCCCCC;
-        font-family: Segoe UI;
-        font-size: 12px;
-    }
-    
-    QTabWidget::pane {
-        border: 1px solid #404040;
-        margin: -1px 0 0 -1px;
-    }
-    
-    QTabBar::tab {
-        background: #353535;
-        border: 1px solid #404040;
-        padding: 8px 15px;
-    }
-    
-    QTabBar::tab:selected {
-        background: #2D2D2D;
-        border-bottom-color: #2D2D2D;
-    }
-    
-    QLineEdit {
-        background: #353535;
-        border: 1px solid #404040;
-        padding: 5px;
-        border-radius: 3px;
-    }
-    
-    QListWidget {
-        background: #353535;
-        border: 1px solid #404040;
-        border-radius: 3px;
-    }
-    
-    QPushButton {
-        background: #404040;
-        border: 1px solid #4D4D4D;
-        padding: 5px 15px;
-        border-radius: 3px;
-    }
-    
-    QPushButton:hover {
-        background: #4D4D4D;
-    }
-    
-    QMenu {
-        background: #353535;
-        border: 1px solid #404040;
-    }
-    
-    QMenu::item:selected {
-        background: #404040;
-    }
-"""
+def load_stylesheet():
+    try:
+        with open('dark_theme.qss', 'r') as f:
+            return f.read()
+    except Exception as e:
+        print(f"Error loading stylesheet: {e}")
+        return ""
+class TrayApp(QSystemTrayIcon):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setIcon(QIcon("icon.ico"))
+        
+        self.menu = QMenu()
+        self.settings_action = self.menu.addAction("Settings")
+        self.exit_action = self.menu.addAction("Exit")
+        
+        self.settings_action.triggered.connect(self.show_settings)
+        self.exit_action.triggered.connect(QApplication.instance().quit)
+        
+        self.setContextMenu(self.menu)
+        self.settings_window = None
 
+    def show_settings(self):
+        if not self.settings_window:
+            self.settings_window = SettingsWindow()
+        self.settings_window.show()
+    
 class HotkeyLineEdit(QLineEdit):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -113,6 +82,93 @@ class AudioSessionWidget(QListWidgetItem):
         except:
             return "Unknown"
 
+class EditableTabBar(QTabBar):
+    edit_requested = pyqtSignal(int)
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.editor = QLineEdit(self)
+        self.editor.setWindowFlags(Qt.WindowType.Popup)
+        self.editor.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.editor.hide()
+        self.editor.editingFinished.connect(self.finish_editing)
+        self.editor.installEventFilter(self)
+        self.current_edit_index = -1
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Escape:
+            self.editor.hide()
+            return True
+        return super().eventFilter(obj, event)
+
+    def mouseDoubleClickEvent(self, event):
+        index = self.tabAt(event.pos())
+        if index >= 0:
+            self.start_edit(index)
+        super().mouseDoubleClickEvent(event)
+
+    def start_edit(self, index):
+        self.current_edit_index = index
+        rect = self.tabRect(index)
+        self.editor.setGeometry(rect)
+        self.editor.setText(self.tabText(index))
+        self.editor.selectAll()
+        self.editor.show()
+        self.editor.setFocus()
+
+    def finish_editing(self):
+        if self.current_edit_index >= 0:
+            new_text = self.editor.text()
+            if new_text:
+                self.setTabText(self.current_edit_index, new_text)
+                self.edit_requested.emit(self.current_edit_index)
+            self.editor.hide()
+            self.current_edit_index = -1
+
+class EditableTabWidget(QTabWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setTabBar(EditableTabBar(self))
+        self.tabBar().edit_requested.connect(self.handle_tab_edited)
+
+    def handle_tab_edited(self, index):
+        self.tabBar().update()
+        self.window().update_group_names()
+
+class EditableLabel(QLabel):
+    def __init__(self, text, parent=None):
+        super().__init__(text, parent)
+        self.editor = QLineEdit(self)
+        self.editor.setWindowFlags(Qt.WindowType.Popup)
+        self.editor.hide()
+        self.editor.editingFinished.connect(self.finish_editing)
+        self.editor.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Escape:
+            self.editor.hide()
+            return True
+        return super().eventFilter(obj, event)
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.start_editing()
+        super().mouseDoubleClickEvent(event)
+
+    def start_editing(self):
+        self.editor.setGeometry(self.rect())
+        self.editor.setText(self.text())
+        self.editor.selectAll()
+        self.editor.show()
+        self.editor.setFocus()
+
+    def finish_editing(self):
+        new_text = self.editor.text()
+        if new_text:
+            self.setText(new_text)
+        self.editor.hide()
+        self.window().update_group_names_by_label(self)
+
 class AppsTab(QWidget):
     tab_renamed = pyqtSignal(int, str)
 
@@ -126,12 +182,10 @@ class AppsTab(QWidget):
     def init_ui(self):
         layout = QHBoxLayout()
         
-        # Left panel
         self.left_panel = QListWidget()
         self.left_panel.setDragEnabled(True)
         self.left_panel.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         
-        # Buttons
         btn_panel = QHBoxLayout()
         self.delete_btn = QPushButton("Delete")
         self.delete_btn.clicked.connect(self.delete_item)
@@ -141,43 +195,49 @@ class AppsTab(QWidget):
         left_layout.addWidget(self.left_panel)
         left_layout.addLayout(btn_panel)
         
-        # Right tabs
-        self.right_tabs = QTabWidget()
+        self.right_tabs = EditableTabWidget()
         self.right_tabs.setTabPosition(QTabWidget.TabPosition.South)
         
         for i in range(3):
             tab = QWidget()
             tab.list = QListWidget()
+            tab.list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            tab.list.customContextMenuRequested.connect(self.show_context_menu)
             tab.list.setAcceptDrops(True)
             tab.list.setDragDropMode(QAbstractItemView.DragDropMode.DropOnly)
+            tab.list.keyPressEvent = self.list_key_press_event
             tab.layout = QVBoxLayout()
             tab.layout.addWidget(tab.list)
             tab.setLayout(tab.layout)
             self.right_tabs.addTab(tab, f"Category {i+1}")
         
-        self.right_tabs.tabBar().installEventFilter(self)
-        
         layout.addLayout(left_layout, 40)
         layout.addWidget(self.right_tabs, 60)
         self.setLayout(layout)
 
-    def eventFilter(self, source, event):
-        if (event.type() == QEvent.Type.MouseButtonDblClick and 
-            source is self.right_tabs.tabBar()):
-            index = self.right_tabs.tabBar().tabAt(event.pos())
-            if index >= 0:
-                self.rename_tab(index)
-                return True
-        return super().eventFilter(source, event)
+    def list_key_press_event(self, event):
+        if event.key() == Qt.Key.Key_Delete:
+            self.delete_current_item()
+        else:
+            QListWidget.keyPressEvent(self.sender(), event)
 
-    def rename_tab(self, index):
-        old_name = self.right_tabs.tabText(index)
-        new_name, ok = QInputDialog.getText(
-            self, "Rename Category", "New name:", text=old_name
-        )
-        if ok and new_name:
-            self.right_tabs.setTabText(index, new_name)
-            self.tab_renamed.emit(index, new_name)
+    def delete_current_item(self):
+        list_widget = self.sender()
+        current_item = list_widget.currentItem()
+        if current_item:
+            row = list_widget.row(current_item)
+            list_widget.takeItem(row)
+
+    def show_context_menu(self, pos):
+        list_widget = self.sender()
+        item = list_widget.itemAt(pos)
+        if item:
+            menu = QMenu()
+            delete_action = menu.addAction("Delete")
+            action = menu.exec(list_widget.mapToGlobal(pos))
+            if action == delete_action:
+                row = list_widget.row(item)
+                list_widget.takeItem(row)
 
     def init_audio(self):
         self.update_sessions()
@@ -217,20 +277,17 @@ class SettingsWindow(QWidget):
     def init_ui(self):
         tab_widget = QTabWidget()
         
-        # Hotkeys Tab
         hotkeys_tab = QWidget()
         main_hotkeys_layout = QHBoxLayout()
         
-        # Groups
         self.groups_layout = QFormLayout()
         self.group_edits = []
         for i in range(3):
             edit = HotkeyLineEdit()
-            label = QLabel(f"Category {i+1} -")
+            label = EditableLabel(f"Category {i+1} -")
             self.groups_layout.addRow(label, edit)
             self.group_edits.append(edit)
         
-        # Volume controls
         volume_layout = QFormLayout()
         self.volume_controls = {}
         for control in ["Vol+", "Vol-", "Mute"]:
@@ -242,14 +299,8 @@ class SettingsWindow(QWidget):
         main_hotkeys_layout.addLayout(volume_layout, 40)
         hotkeys_tab.setLayout(main_hotkeys_layout)
         
-        # Apps Tab
         self.apps_tab = AppsTab()
-        self.apps_tab.tab_renamed.connect(self.update_group_names)
         
-        # Initial update
-        QTimer.singleShot(0, self.update_group_names)
-        
-        # Etc Tab
         etc_tab = QWidget()
         etc_layout = QVBoxLayout()
         etc_layout.addWidget(QLabel("Additional Settings"))
@@ -263,35 +314,29 @@ class SettingsWindow(QWidget):
         main_layout.addWidget(tab_widget)
         self.setLayout(main_layout)
 
-    def update_group_names(self, index=None, name=None):
+    def update_group_names(self):
         for i in range(3):
             label = self.groups_layout.itemAt(i, QFormLayout.ItemRole.LabelRole).widget()
             tab_name = self.apps_tab.right_tabs.tabText(i)
             label.setText(f"{tab_name} -")
 
-class TrayApp(QSystemTrayIcon):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setIcon(QIcon("icon.ico"))
-        
-        self.menu = QMenu()
-        self.settings_action = self.menu.addAction("Settings")
-        self.exit_action = self.menu.addAction("Exit")
-        
-        self.settings_action.triggered.connect(self.show_settings)
-        self.exit_action.triggered.connect(QApplication.instance().quit)
-        
-        self.setContextMenu(self.menu)
-        self.settings_window = None
-
-    def show_settings(self):
-        if not self.settings_window:
-            self.settings_window = SettingsWindow()
-        self.settings_window.show()
+    def update_group_names_by_label(self, label):
+        index = None
+        for i in range(3):
+            if self.groups_layout.itemAt(i, QFormLayout.ItemRole.LabelRole).widget() == label:
+                index = i
+                break
+        if index is not None:
+            new_name = label.text().replace(" -", "")
+            self.apps_tab.right_tabs.setTabText(index, new_name)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    app.setStyleSheet(DARK_STYLE)
+    style = load_stylesheet()
+    if style:
+        app.setStyleSheet(style)
+    else:
+        print("Using default styles")
     
     main_window = QMainWindow()
     main_window.hide()
