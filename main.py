@@ -6,7 +6,6 @@ from PyQt6.QtGui import *
 from PyQt6.QtCore import *
 from pycaw.pycaw import AudioUtilities
 
-# Инициализация COM для PyCaw
 comtypes.CoInitialize()
 
 def load_stylesheet():
@@ -63,6 +62,22 @@ class AudioSessionWidget(QListWidgetItem):
             return self.session.Process and self.session.Process.name() or "System"
         except:
             return "Unknown"
+
+class CustomListWidget(QListWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.setDragDropMode(QAbstractItemView.DragDropMode.DropOnly)
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Delete:
+            self.delete_selected_item()
+        else:
+            super().keyPressEvent(event)
+
+    def delete_selected_item(self):
+        if current_item := self.currentItem():
+            self.takeItem(self.row(current_item))
 
 class EditableTabBar(QTabBar):
     edit_requested = pyqtSignal(int)
@@ -168,9 +183,8 @@ class AppsTab(QWidget):
     def init_ui(self):
         layout = QHBoxLayout()
         
-        self.left_panel = QListWidget()
+        self.left_panel = CustomListWidget()
         self.left_panel.setDragEnabled(True)
-        self.left_panel.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         
         btn_panel = QHBoxLayout()
         self.delete_btn = QPushButton("Delete")
@@ -186,12 +200,10 @@ class AppsTab(QWidget):
         
         for i in range(3):
             tab = QWidget()
-            tab.list = QListWidget()
+            tab.list = CustomListWidget()
             tab.list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
             tab.list.customContextMenuRequested.connect(self.show_context_menu)
             tab.list.setAcceptDrops(True)
-            tab.list.setDragDropMode(QAbstractItemView.DragDropMode.DropOnly)
-            tab.list.keyPressEvent = self.list_key_press_event
             tab.layout = QVBoxLayout()
             tab.layout.addWidget(tab.list)
             tab.setLayout(tab.layout)
@@ -201,27 +213,13 @@ class AppsTab(QWidget):
         layout.addWidget(self.right_tabs, 60)
         self.setLayout(layout)
 
-    def list_key_press_event(self, event):
-        if event.key() == Qt.Key.Key_Delete:
-            list_widget = self.sender()
-            if list_widget and isinstance(list_widget, QListWidget):
-                current_item = list_widget.currentItem()
-                if current_item:
-                    row = list_widget.row(current_item)
-                    list_widget.takeItem(row)
-        else:
-            super(QListWidget, self.sender()).keyPressEvent(event)
-
     def show_context_menu(self, pos):
         list_widget = self.sender()
-        item = list_widget.itemAt(pos)
-        if item:
+        if item := list_widget.itemAt(pos):
             menu = QMenu()
             delete_action = menu.addAction("Delete")
-            action = menu.exec(list_widget.mapToGlobal(pos))
-            if action == delete_action:
-                row = list_widget.row(item)
-                list_widget.takeItem(row)
+            if menu.exec(list_widget.mapToGlobal(pos)) == delete_action:
+                list_widget.takeItem(list_widget.row(item))
 
     def init_audio(self):
         self.update_sessions()
@@ -243,12 +241,9 @@ class AppsTab(QWidget):
             self.sessions = new_sessions
 
     def delete_item(self):
-        current_tab = self.right_tabs.currentWidget()
-        if current_tab:
-            current_item = current_tab.list.currentItem()
-            if current_item:
-                row = current_tab.list.row(current_item)
-                current_tab.list.takeItem(row)
+        if current_tab := self.right_tabs.currentWidget():
+            if current_item := current_tab.list.currentItem():
+                current_tab.list.takeItem(current_tab.list.row(current_item))
 
 class SettingsWindow(QWidget):
     def __init__(self):
@@ -301,18 +296,13 @@ class SettingsWindow(QWidget):
     def update_group_names(self):
         for i in range(3):
             label = self.groups_layout.itemAt(i, QFormLayout.ItemRole.LabelRole).widget()
-            tab_name = self.apps_tab.right_tabs.tabText(i)
-            label.setText(f"{tab_name} -")
+            label.setText(f"{self.apps_tab.right_tabs.tabText(i)} -")
 
     def update_group_names_by_label(self, label):
-        index = None
         for i in range(3):
             if self.groups_layout.itemAt(i, QFormLayout.ItemRole.LabelRole).widget() == label:
-                index = i
+                self.apps_tab.right_tabs.setTabText(i, label.text().replace(" -", ""))
                 break
-        if index is not None:
-            new_name = label.text().replace(" -", "")
-            self.apps_tab.right_tabs.setTabText(index, new_name)
 
 class TrayApp(QSystemTrayIcon):
     def __init__(self, parent=None):
