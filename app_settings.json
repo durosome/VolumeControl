@@ -1,31 +1,13 @@
 {
   "groups": [
-    {
-      "name": "залупа",
-      "hotkey": "Num1",
-      "apps": [
-        "steam.exe",
-        "msedge.exe"
-      ]
-    },
-    {
-      "name": "хуец",
-      "hotkey": "Num2",
-      "apps": [
-        "obs64.exe"
-      ]
-    },
-    {
-      "name": "пиздёнка",
-      "hotkey": "Num3",
-      "apps": [
-        "RutonyChat.exe"
-      ]
-    }
+    {"name": "Work", "hotkey": "Ctrl+1", "apps": ["chrome.exe", "vscode.exe"]},
+    {"name": "Music", "hotkey": "Ctrl+2", "apps": ["spotify.exe"]},
+    {"name": "Games", "hotkey": "Ctrl+3", "apps": ["steam.exe"]},
+    {"name": "Social", "hotkey": "Ctrl+4", "apps": ["discord.exe"]}
   ],
   "volume_controls": {
-    "Vol+": "Num+",
-    "Vol-": "Num-",
-    "Mute": "Num*"
+    "Vol+": "Ctrl+Up",
+    "Vol-": "Ctrl+Down",
+    "Mute": "Ctrl+M"
   }
 }
