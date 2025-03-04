@@ -1,0 +1,31 @@
+{
+  "groups": [
+    {
+      "name": "залупа",
+      "hotkey": "Num1",
+      "apps": [
+        "steam.exe",
+        "msedge.exe"
+      ]
+    },
+    {
+      "name": "хуец",
+      "hotkey": "Num2",
+      "apps": [
+        "obs64.exe"
+      ]
+    },
+    {
+      "name": "пиздёнка",
+      "hotkey": "Num3",
+      "apps": [
+        "RutonyChat.exe"
+      ]
+    }
+  ],
+  "volume_controls": {
+    "Vol+": "Num+",
+    "Vol-": "Num-",
+    "Mute": "Num*"
+  }
+}

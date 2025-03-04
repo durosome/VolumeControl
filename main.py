@@ -1,12 +1,52 @@
 import sys
 import comtypes
 import os
+import json
+from pathlib import Path
 from PyQt6.QtWidgets import *
 from PyQt6.QtGui import *
 from PyQt6.QtCore import *
 from pycaw.pycaw import AudioUtilities
 
 comtypes.CoInitialize()
+
+class SettingsManager:
+    SETTINGS_FILE = "app_settings.json"
+    
+    @classmethod
+    def load_settings(cls):
+        try:
+            if Path(cls.SETTINGS_FILE).exists():
+                with open(cls.SETTINGS_FILE, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"Error loading settings: {e}")
+        return cls.default_settings()
+
+    @classmethod
+    def save_settings(cls, data):
+        try:
+            with open(cls.SETTINGS_FILE, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            return True
+        except Exception as e:
+            print(f"Error saving settings: {e}")
+            return False
+
+    @staticmethod
+    def default_settings():
+        return {
+            "groups": [
+                {"name": "Category 1", "hotkey": "", "apps": []},
+                {"name": "Category 2", "hotkey": "", "apps": []},
+                {"name": "Category 3", "hotkey": "", "apps": []}
+            ],
+            "volume_controls": {
+                "Vol+": "",
+                "Vol-": "",
+                "Mute": ""
+            }
+        }
 
 def load_stylesheet():
     try:
@@ -22,7 +62,7 @@ class HotkeyLineEdit(QLineEdit):
         self.setReadOnly(True)
         self.keys = []
         self.modifiers = Qt.KeyboardModifier.NoModifier
-        self.setMinimumWidth(120)  # Минимальная ширина поля для горячих клавиш
+        self.setMinimumWidth(120)
 
     def keyPressEvent(self, event):
         key = event.key()
@@ -88,7 +128,7 @@ class EditableTabBar(QTabBar):
         self.editor = QLineEdit(self)
         self.editor.setWindowFlags(Qt.WindowType.Popup)
         self.editor.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.editor.setMinimumWidth(120)  # Минимальная ширина редактора вкладок
+        self.editor.setMinimumWidth(120)
         self.editor.hide()
         self.editor.editingFinished.connect(self.finish_editing)
         self.editor.installEventFilter(self)
@@ -111,7 +151,7 @@ class EditableTabBar(QTabBar):
         rect = self.tabRect(index)
         global_pos = self.mapToGlobal(rect.topLeft())
         self.editor.move(global_pos)
-        self.editor.resize(max(rect.width(), 120), rect.height())  # Минимальная ширина 120px
+        self.editor.resize(max(rect.width(), 120), rect.height())
         self.editor.setText(self.tabText(index))
         self.editor.selectAll()
         self.editor.show()
@@ -139,10 +179,10 @@ class EditableTabWidget(QTabWidget):
 class EditableLabel(QLabel):
     def __init__(self, text, parent=None):
         super().__init__(text, parent)
-        self.setMinimumWidth(120)  # Минимальная ширина лейбла
+        self.setMinimumWidth(120)
         self.editor = QLineEdit(self)
         self.editor.setWindowFlags(Qt.WindowType.Popup)
-        self.editor.setMinimumWidth(120)  # Минимальная ширина редактора
+        self.editor.setMinimumWidth(120)
         self.editor.hide()
         self.editor.editingFinished.connect(self.finish_editing)
         self.editor.installEventFilter(self)
@@ -161,7 +201,7 @@ class EditableLabel(QLabel):
     def start_editing(self):
         global_pos = self.mapToGlobal(QPoint(0, 0))
         self.editor.move(global_pos)
-        self.editor.resize(max(self.width(), 120), self.height())  # Минимальная ширина 120px
+        self.editor.resize(max(self.width(), 120), self.height())
         self.editor.setText(self.text())
         self.editor.selectAll()
         self.editor.show()
@@ -249,13 +289,21 @@ class AppsTab(QWidget):
             if current_item := current_tab.list.currentItem():
                 current_tab.list.takeItem(current_tab.list.row(current_item))
 
+    def add_application_to_group(self, app_name, group_index):
+        tab_widget = self.right_tabs.widget(group_index)
+        if not any(tab_widget.list.item(i).text() == app_name 
+                 for i in range(tab_widget.list.count())):
+            tab_widget.list.addItem(QListWidgetItem(app_name))
+
 class SettingsWindow(QWidget):
     def __init__(self):
         super().__init__()
+        self.settings = SettingsManager.load_settings()
         self.setWindowTitle("Settings")
-        self.setMinimumSize(600, 250)  # Увеличен минимальный размер окна
+        self.setMinimumSize(600, 250)
         self.resize(600, 300)
         self.init_ui()
+        self.load_current_settings()
 
     def init_ui(self):
         tab_widget = QTabWidget()
@@ -298,6 +346,41 @@ class SettingsWindow(QWidget):
         main_layout.addWidget(tab_widget)
         self.setLayout(main_layout)
 
+    def load_current_settings(self):
+        # Load group names and hotkeys
+        for i in range(3):
+            self.apps_tab.right_tabs.setTabText(i, self.settings["groups"][i]["name"])
+            self.group_edits[i].setText(self.settings["groups"][i]["hotkey"])
+            
+            # Load apps in groups
+            tab_widget = self.apps_tab.right_tabs.widget(i)
+            tab_widget.list.clear()
+            for app in self.settings["groups"][i]["apps"]:
+                tab_widget.list.addItem(QListWidgetItem(app))
+
+        # Load volume controls
+        for control in ["Vol+", "Vol-", "Mute"]:
+            self.volume_controls[control].setText(self.settings["volume_controls"][control])
+
+    def save_current_settings(self):
+        # Save group names and hotkeys
+        for i in range(3):
+            self.settings["groups"][i]["name"] = self.apps_tab.right_tabs.tabText(i)
+            self.settings["groups"][i]["hotkey"] = self.group_edits[i].text()
+            
+            # Save apps in groups
+            tab_widget = self.apps_tab.right_tabs.widget(i)
+            self.settings["groups"][i]["apps"] = [
+                tab_widget.list.item(j).text() 
+                for j in range(tab_widget.list.count())
+            ]
+
+        # Save volume controls
+        for control in ["Vol+", "Vol-", "Mute"]:
+            self.settings["volume_controls"][control] = self.volume_controls[control].text()
+            
+        return SettingsManager.save_settings(self.settings)
+
     def update_group_names(self):
         for i in range(3):
             label = self.groups_layout.itemAt(i, QFormLayout.ItemRole.LabelRole).widget()
@@ -319,7 +402,7 @@ class TrayApp(QSystemTrayIcon):
         self.exit_action = self.menu.addAction("Exit")
         
         self.settings_action.triggered.connect(self.show_settings)
-        self.exit_action.triggered.connect(QApplication.instance().quit)
+        self.exit_action.triggered.connect(self.on_exit)
         
         self.setContextMenu(self.menu)
         self.settings_window = None
@@ -328,6 +411,11 @@ class TrayApp(QSystemTrayIcon):
         if not self.settings_window:
             self.settings_window = SettingsWindow()
         self.settings_window.show()
+
+    def on_exit(self):
+        if self.settings_window:
+            self.settings_window.save_current_settings()
+        QApplication.instance().quit()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
@@ -342,5 +430,7 @@ if __name__ == "__main__":
     
     tray = TrayApp(main_window)
     tray.show()
+    
+    app.aboutToQuit.connect(lambda: tray.settings_window.save_current_settings() if tray.settings_window else None)
     
     sys.exit(app.exec())
