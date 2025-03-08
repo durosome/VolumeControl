@@ -1,13 +1,30 @@
 {
   "groups": [
-    {"name": "Work", "hotkey": "Ctrl+1", "apps": ["chrome.exe", "vscode.exe"]},
-    {"name": "Music", "hotkey": "Ctrl+2", "apps": ["spotify.exe"]},
-    {"name": "Games", "hotkey": "Ctrl+3", "apps": ["steam.exe"]},
-    {"name": "Social", "hotkey": "Ctrl+4", "apps": ["discord.exe"]}
+    {
+      "name": "steam",
+      "hotkey": "2",
+      "apps": [
+        "steam.exe"
+      ]
+    },
+    {
+      "name": "edge",
+      "hotkey": "3",
+      "apps": [
+        "msedge.exe"
+      ]
+    },
+    {
+      "name": "obs",
+      "hotkey": "4",
+      "apps": [
+        "obs64.exe"
+      ]
+    }
   ],
   "volume_controls": {
-    "Vol+": "Ctrl+Up",
-    "Vol-": "Ctrl+Down",
-    "Mute": "Ctrl+M"
+    "Vol+": "6",
+    "Vol-": "7",
+    "Mute": "8"
   }
 }
